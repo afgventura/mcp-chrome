@@ -103,8 +103,9 @@ export default defineContentScript({
     // Register message listener
     chrome.runtime.onMessage.addListener(handleMessage);
 
-    // Cleanup on page unload
-    window.addEventListener('unload', () => {
+    // pagehide is allowed when a page disables the legacy unload event through
+    // Permissions-Policy, and it also runs for back/forward-cache navigations.
+    window.addEventListener('pagehide', () => {
       chrome.runtime.onMessage.removeListener(handleMessage);
       if (controller) {
         controller.dispose();
