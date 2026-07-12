@@ -30,10 +30,13 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build shared package
         run: pnpm run build:shared
+
+      - name: Prepare extension build
+        run: pnpm --filter chrome-mcp-server exec wxt prepare
 
       - name: Build Chrome extension
         run: pnpm run build:extension
