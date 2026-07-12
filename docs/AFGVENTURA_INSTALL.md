@@ -39,6 +39,10 @@ The bridge listens locally at `http://127.0.0.1:12306/mcp` while the extension i
 It uses stateless HTTP request dispatch, so multiple Codex and Claude sessions can share the same
 bridge safely and remain usable after the native host reconnects.
 
+The extension also installs a browser-persisted 30-second watchdog. Chrome alarms wake the
+Manifest V3 service worker after suspension and reconnect the native host automatically; users
+should not normally need to reopen the popup or click **Connect** after the first setup.
+
 ## Downloading a prebuilt extension
 
 GitHub Actions publishes `chrome-mcp-extension.zip` for every build. Tagged versions (`v*`) also
@@ -86,3 +90,11 @@ node app/native-server/dist/cli.js doctor
 ```
 
 If connectivity fails, confirm the extension is loaded, reload it, and click **Connect** again.
+The watchdog may take up to 30 seconds to restore the listener after Chrome resumes from a fully
+suspended state. Use the doctor command to distinguish a missing listener from an MCP protocol
+error:
+
+```bash
+node app/native-server/dist/cli.js doctor
+curl --fail --silent http://127.0.0.1:12306/ping
+```

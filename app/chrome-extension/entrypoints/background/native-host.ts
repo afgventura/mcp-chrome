@@ -4,6 +4,7 @@ import { NATIVE_HOST, STORAGE_KEYS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '@/c
 import { handleCallTool } from './tools';
 import { listPublished, getFlow } from './record-replay/flow-store';
 import { acquireKeepalive } from './keepalive-manager';
+import { ensureNativeHostWatchdog, NATIVE_HOST_WATCHDOG_ALARM } from './native-host-watchdog';
 
 const LOG_PREFIX = '[NativeHost]';
 
@@ -137,6 +138,15 @@ function resetReconnectState(): void {
   clearReconnectTimer();
 }
 
+/**
+ * Install a browser-owned watchdog for the native host connection.
+ *
+ * Unlike setTimeout, chrome.alarms survives service-worker suspension and
+ * wakes the background worker. This is important because the HTTP MCP server
+ * lives in the native-messaging child process: when the native Port is lost,
+ * port 12306 disappears and newly-starting MCP clients fail their initialize
+ * request immediately.
+ */
 // ==================== Keepalive Management ====================
 
 /**
@@ -468,6 +478,15 @@ export function connectNativeHost(port: number = NATIVE_HOST.DEFAULT_PORT): bool
  * Initialize native host listeners and load initial state
  */
 export const initNativeHostListener = () => {
+  void ensureNativeHostWatchdog().catch((error: unknown) => {
+    console.warn(`${LOG_PREFIX} Failed to install native-host watchdog`, error);
+  });
+
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name !== NATIVE_HOST_WATCHDOG_ALARM) return;
+    void ensureNativeConnected('watchdog_alarm').catch(() => {});
+  });
+
   // Initialize server status from storage
   loadServerStatus()
     .then((status) => {
