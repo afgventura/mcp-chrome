@@ -10,6 +10,10 @@ gmolioeebfppjehkofcpiefglimgdbog
 The key in the manifest is public identity material, not a private signing key. Do not add a
 private `.pem` key to this repository.
 
+This fork also uses the exclusive native-host name `com.afgventura.chromemcp.nativehost` and a
+versioned extension-to-bridge handshake. An upstream or incompatible bridge therefore fails closed
+instead of starting a partially compatible MCP server.
+
 ## First-time installation on macOS
 
 Prerequisites:

@@ -11,10 +11,14 @@ const defaultManifestPath = join(
   'Google',
   'Chrome',
   'NativeMessagingHosts',
-  'com.chromemcp.nativehost.json',
+  `${shared.HOST_NAME}.json`,
 );
 const manifestPath = resolve(process.argv[2] ?? defaultManifestPath);
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+
+if (manifest.name !== shared.HOST_NAME) {
+  throw new Error(`Native-host namespace mismatch: expected ${shared.HOST_NAME}`);
+}
 
 if (
   !Array.isArray(manifest.allowed_origins) ||

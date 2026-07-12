@@ -1,5 +1,8 @@
 export const DEFAULT_SERVER_PORT = 12306;
-export const HOST_NAME = 'com.chromemcp.nativehost';
+// Fork-owned namespace prevents Chrome from launching an independently
+// released upstream native bridge for this extension.
+export const HOST_NAME = 'com.afgventura.chromemcp.nativehost';
+export const BRIDGE_PROTOCOL_VERSION = 1;
 /**
  * Stable identity for afgventura development and internal distributions.
  *

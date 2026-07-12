@@ -1,7 +1,7 @@
 import { stdin, stdout } from 'process';
 import { Server } from './server';
 import { v4 as uuidv4 } from 'uuid';
-import { NativeMessageType } from 'chrome-mcp-shared';
+import { BRIDGE_PROTOCOL_VERSION, NativeMessageType } from 'chrome-mcp-shared';
 import { TIMEOUTS } from './constant';
 import fileHandler from './file-handler';
 
@@ -120,6 +120,12 @@ export class NativeMessagingHost {
     try {
       switch (message.type) {
         case NativeMessageType.START:
+          if (message.payload?.bridgeProtocolVersion !== BRIDGE_PROTOCOL_VERSION) {
+            this.sendError(
+              `Incompatible extension bridge protocol: expected ${BRIDGE_PROTOCOL_VERSION}, received ${String(message.payload?.bridgeProtocolVersion)}`,
+            );
+            break;
+          }
           await this.startServer(message.payload?.port || 12306);
           break;
         case NativeMessageType.STOP:
@@ -245,7 +251,7 @@ export class NativeMessagingHost {
 
       this.sendMessage({
         type: NativeMessageType.SERVER_STARTED,
-        payload: { port },
+        payload: { port, bridgeProtocolVersion: BRIDGE_PROTOCOL_VERSION },
       });
     } catch (error: any) {
       this.sendError(`Failed to start server: ${error.message}`);

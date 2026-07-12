@@ -1,4 +1,4 @@
-import { NativeMessageType } from 'chrome-mcp-shared';
+import { BRIDGE_PROTOCOL_VERSION, NativeMessageType } from 'chrome-mcp-shared';
 import { BACKGROUND_MESSAGE_TYPES } from '@/common/message-types';
 import { NATIVE_HOST, STORAGE_KEYS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '@/common/constants';
 import { handleCallTool } from './tools';
@@ -417,6 +417,13 @@ export function connectNativeHost(port: number = NATIVE_HOST.DEFAULT_PORT): bool
           });
         }
       } else if (message.type === NativeMessageType.SERVER_STARTED) {
+        if (message.payload?.bridgeProtocolVersion !== BRIDGE_PROTOCOL_VERSION) {
+          console.error(
+            `${LOG_PREFIX} Incompatible native bridge protocol: expected ${BRIDGE_PROTOCOL_VERSION}, received ${String(message.payload?.bridgeProtocolVersion)}`,
+          );
+          nativePort?.disconnect();
+          return;
+        }
         const port = message.payload?.port;
         currentServerStatus = {
           isRunning: true,
@@ -463,7 +470,10 @@ export function connectNativeHost(port: number = NATIVE_HOST.DEFAULT_PORT): bool
       scheduleReconnect('native_port_disconnected');
     });
 
-    nativePort.postMessage({ type: NativeMessageType.START, payload: { port } });
+    nativePort.postMessage({
+      type: NativeMessageType.START,
+      payload: { port, bridgeProtocolVersion: BRIDGE_PROTOCOL_VERSION },
+    });
     // Note: Don't reset reconnect state here. Wait for SERVER_STARTED confirmation.
     // Chrome may return a Port but disconnect immediately if native host is missing.
     return true;

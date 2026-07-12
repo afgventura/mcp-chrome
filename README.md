@@ -54,6 +54,9 @@ The Chrome extension and native bridge are a matched pair. This fork uses the st
 authorize a different extension ID. Chrome rejects native-messaging connections when those IDs do
 not match, leaving `http://127.0.0.1:12306/mcp` unavailable.
 
+The fork also uses its own native-host namespace and a versioned compatibility handshake. This
+prevents an upstream or partially upgraded bridge from being accepted silently.
+
 Install both parts from this repository with the provided installer:
 
 ```bash
