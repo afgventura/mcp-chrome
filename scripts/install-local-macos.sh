@@ -39,6 +39,7 @@ node scripts/verify-extension-identity.mjs
 echo "Building and registering the native bridge..."
 "${pnpm_cmd[@]}" run build:native
 "${pnpm_cmd[@]}" --filter mcp-chrome-bridge run register:dev
+node scripts/verify-native-host-manifest.mjs
 
 extension_dir="$repo_root/app/chrome-extension/.output/chrome-mv3"
 echo

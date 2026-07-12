@@ -44,6 +44,18 @@ jobs:
       - name: Verify stable extension identity
         run: node scripts/verify-extension-identity.mjs
 
+      - name: Verify native-host identity source
+        run: |
+          node --input-type=module <<'EOF'
+          import { readFileSync } from 'node:fs';
+          const shared = await import('./packages/shared/dist/index.mjs');
+          const nativeSource = readFileSync('./app/native-server/src/scripts/constant.ts', 'utf8');
+          if (!nativeSource.includes("from 'chrome-mcp-shared'")) {
+            throw new Error('Native host must import EXTENSION_ID from chrome-mcp-shared');
+          }
+          console.log(`Native host identity source verified: ${shared.EXTENSION_ID}`);
+          EOF
+
       - name: Package unpacked extension
         run: |
           cd app/chrome-extension/.output/chrome-mv3

@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const expectedId = 'gmolioeebfppjehkofcpiefglimgdbog';
+const shared = await import('../packages/shared/dist/index.mjs');
+const expectedId = shared.EXTENSION_ID;
 const manifestPath = resolve('app/chrome-extension/.output/chrome-mv3/manifest.json');
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 

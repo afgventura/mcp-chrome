@@ -27,6 +27,11 @@ cd mcp-chrome
 ./scripts/install-local-macos.sh
 ```
 
+Use this installer for both halves of the integration. Do not pair this fork's extension with the
+upstream `mcp-chrome-bridge` npm package: Chrome Native Messaging authorizes an exact extension ID,
+and independently released upstream builds may authorize a different ID. The installer now fails
+if the generated native-host manifest does not authorize this fork's stable extension ID.
+
 Then complete the one Chrome-managed step:
 
 1. Open `chrome://extensions/`.
