@@ -7,7 +7,7 @@ import {
 import nativeMessagingHostInstance from '../native-messaging-host';
 import { NativeMessageType, TOOL_SCHEMAS } from 'chrome-mcp-shared';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { applyBackgroundPolicy } from './background-policy';
+import { applyBackgroundPolicy, filterExposedTools, isToolDisabled } from './background-policy';
 
 export async function listDynamicFlowTools(): Promise<Tool[]> {
   try {
@@ -69,10 +69,9 @@ export async function listDynamicFlowTools(): Promise<Tool[]> {
 
 export const setupTools = (server: Server) => {
   // List tools handler
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const dynamicTools = await listDynamicFlowTools();
-    return { tools: [...TOOL_SCHEMAS, ...dynamicTools] };
-  });
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: await listAvailableTools(),
+  }));
 
   // Call tool handler
   server.setRequestHandler(CallToolRequestSchema, async (request) =>
@@ -80,13 +79,23 @@ export const setupTools = (server: Server) => {
   );
 };
 
-export const listAvailableTools = async (): Promise<Tool[]> => [
-  ...TOOL_SCHEMAS,
-  ...(await listDynamicFlowTools()),
-];
+export const listAvailableTools = async (): Promise<Tool[]> =>
+  filterExposedTools([...TOOL_SCHEMAS, ...(await listDynamicFlowTools())]);
 
 export const handleToolCall = async (name: string, args: any): Promise<CallToolResult> => {
   try {
+    if (isToolDisabled(name)) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `${name} is disabled because it steals browser focus. Pass tabId directly to subsequent tools instead.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
     const forwardedArgs = applyBackgroundPolicy(name, args);
 
     // If calling a dynamic flow tool (name starts with flow.), proxy to common flow-run tool
