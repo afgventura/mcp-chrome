@@ -7,6 +7,7 @@ import {
 import nativeMessagingHostInstance from '../native-messaging-host';
 import { NativeMessageType, TOOL_SCHEMAS } from 'chrome-mcp-shared';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { applyBackgroundPolicy } from './background-policy';
 
 export async function listDynamicFlowTools(): Promise<Tool[]> {
   try {
@@ -86,6 +87,8 @@ export const listAvailableTools = async (): Promise<Tool[]> => [
 
 export const handleToolCall = async (name: string, args: any): Promise<CallToolResult> => {
   try {
+    const forwardedArgs = applyBackgroundPolicy(name, args);
+
     // If calling a dynamic flow tool (name starts with flow.), proxy to common flow-run tool
     if (name && name.startsWith('flow.')) {
       // We need to resolve flow by slug to ID
@@ -99,7 +102,7 @@ export const handleToolCall = async (name: string, args: any): Promise<CallToolR
         const slug = name.slice('flow.'.length);
         const match = items.find((it: any) => it.slug === slug);
         if (!match) throw new Error(`Flow not found for tool ${name}`);
-        const flowArgs = { flowId: match.id, args };
+        const flowArgs = { flowId: match.id, args: forwardedArgs };
         const proxyRes = await nativeMessagingHostInstance.sendRequestToExtensionAndWait(
           { name: 'record_replay_flow_run', args: flowArgs },
           NativeMessageType.CALL_TOOL,
@@ -126,7 +129,7 @@ export const handleToolCall = async (name: string, args: any): Promise<CallToolR
     const response = await nativeMessagingHostInstance.sendRequestToExtensionAndWait(
       {
         name,
-        args,
+        args: forwardedArgs,
       },
       NativeMessageType.CALL_TOOL,
       120000, // 延长到 120 秒，避免性能分析等长任务超时
