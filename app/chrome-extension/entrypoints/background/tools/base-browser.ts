@@ -3,6 +3,25 @@ import type { ToolResult } from '@/common/tool-handler';
 import { TIMEOUTS, ERROR_MESSAGES } from '@/common/constants';
 
 const PING_TIMEOUT_MS = 300;
+const RESTRICTED_SCRIPT_SCHEMES = [
+  'about:',
+  'chrome:',
+  'chrome-extension:',
+  'devtools:',
+  'edge:',
+  'view-source:',
+] as const;
+
+function getRestrictedInjectionReason(url: string | undefined): string | null {
+  if (!url) return null;
+  if (RESTRICTED_SCRIPT_SCHEMES.some((scheme) => url.startsWith(scheme))) {
+    return `Chrome does not allow extensions to inject content scripts into ${url}`;
+  }
+  if (/^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore)(\/|$)/.test(url)) {
+    return `Chrome does not allow extensions to inject content scripts into the Chrome Web Store`;
+  }
+  return null;
+}
 
 /**
  * Base class for browser tool executors
@@ -23,6 +42,12 @@ export abstract class BaseBrowserToolExecutor implements ToolExecutor {
     frameIds?: number[],
   ): Promise<void> {
     console.log(`Injecting ${files.join(', ')} into tab ${tabId}`);
+
+    const tab = await this.tryGetTab(tabId);
+    const restrictedReason = getRestrictedInjectionReason(tab?.pendingUrl || tab?.url);
+    if (restrictedReason) {
+      throw new Error(`${ERROR_MESSAGES.TOOL_EXECUTION_FAILED}: ${restrictedReason}`);
+    }
 
     // check if script is already injected
     try {
@@ -49,11 +74,13 @@ export abstract class BaseBrowserToolExecutor implements ToolExecutor {
         );
         return;
       } else {
-        console.warn(`Unexpected ping response in tab ${tabId}:`, response);
+        console.debug(`No active content script found in tab ${tabId}; injecting it now.`);
       }
     } catch (error) {
-      console.error(
-        `ping content script failed: ${error instanceof Error ? error.message : String(error)}`,
+      // A missing receiver is the normal first-run path before a content script
+      // has been injected. Keep it out of chrome://extensions error reporting.
+      console.debug(
+        `Content script ping missed in tab ${tabId}; injecting it now: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
 
@@ -74,9 +101,6 @@ export abstract class BaseBrowserToolExecutor implements ToolExecutor {
     } catch (injectionError) {
       const errorMessage =
         injectionError instanceof Error ? injectionError.message : String(injectionError);
-      console.error(
-        `Content script '${files.join(', ')}' injection failed for tab ${tabId}: ${errorMessage}`,
-      );
       throw new Error(
         `${ERROR_MESSAGES.TOOL_EXECUTION_FAILED}: Failed to inject content script in tab ${tabId}: ${errorMessage}`,
       );
