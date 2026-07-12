@@ -47,17 +47,50 @@ Chrome MCP Server is a Chrome extension-based **Model Context Protocol (MCP) ser
 
 ## 🚀 Quick Start
 
-> Afgventura coworkers: use the reproducible macOS setup in
-> [docs/AFGVENTURA_INSTALL.md](docs/AFGVENTURA_INSTALL.md). It builds a stable extension ID and
-> registers the native bridge for the local clone automatically. Prebuilt extension ZIPs are
-> available from tagged GitHub Releases and workflow artifacts.
+### Afgventura fork (required for coworkers)
 
-### Prerequisites
+The Chrome extension and native bridge are a matched pair. This fork uses the stable extension ID
+`gmolioeebfppjehkofcpiefglimgdbog`, while the independently released upstream npm bridge may
+authorize a different extension ID. Chrome rejects native-messaging connections when those IDs do
+not match, leaving `http://127.0.0.1:12306/mcp` unavailable.
+
+Install both parts from this repository with the provided installer:
+
+```bash
+git clone git@github.com:afgventura/mcp-chrome.git
+cd mcp-chrome
+./scripts/install-local-macos.sh
+```
+
+Then:
+
+1. Open `chrome://extensions/` and enable **Developer mode**.
+2. Click **Load unpacked**.
+3. Select `app/chrome-extension/.output/chrome-mv3` from this clone.
+4. Open **Chrome MCP Server** and click **Connect**.
+5. Register the local endpoint with Codex or Claude:
+
+```bash
+codex mcp add chrome-mcp --url http://127.0.0.1:12306/mcp
+claude mcp add --transport http --scope user chrome-mcp http://127.0.0.1:12306/mcp
+```
+
+Do **not** run `npm install -g mcp-chrome-bridge` for this fork. That command installs the upstream
+bridge, which is released independently and may not authorize this fork's extension ID. The local
+installer builds, registers, and verifies the matching bridge automatically. See
+[Afgventura installation](docs/AFGVENTURA_INSTALL.md) for updates, release ZIPs, and diagnostics.
+
+### Upstream distribution
+
+The instructions below apply only when both the extension and bridge come from the upstream
+`hangwin/mcp-chrome` distribution. Do not mix these artifacts with the Afgventura fork.
+
+#### Prerequisites
 
 - Node.js >= 20.0.0 and pnpm/npm
 - Chrome/Chromium browser
 
-### Installation Steps
+#### Installation Steps
 
 1. **Download the latest Chrome extension from GitHub**
 
