@@ -4,6 +4,8 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 import fetch from 'node-fetch';
 
+const MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024;
+
 /**
  * File handler for managing file uploads through the native messaging host
  */
@@ -78,13 +80,17 @@ export class FileHandler {
    */
   private async downloadFile(fileUrl: string, fileName?: string): Promise<any> {
     try {
-      const response = await fetch(fileUrl);
+      const parsedUrl = new URL(fileUrl);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        throw new Error('Only HTTP and HTTPS URLs are supported');
+      }
+      const response = await fetch(parsedUrl, { size: MAX_DOWNLOAD_BYTES });
       if (!response.ok) {
         throw new Error(`Failed to download file: ${response.statusText}`);
       }
 
       // Generate filename if not provided
-      const finalFileName = fileName || this.generateFileName(fileUrl);
+      const finalFileName = this.sanitizeFileName(fileName || this.generateFileName(fileUrl));
       const filePath = path.join(this.tempDir, finalFileName);
 
       // Get the file buffer
@@ -116,7 +122,7 @@ export class FileHandler {
       const buffer = Buffer.from(base64Content, 'base64');
 
       // Generate filename if not provided
-      const finalFileName = fileName || `upload-${Date.now()}.bin`;
+      const finalFileName = this.sanitizeFileName(fileName || `upload-${Date.now()}.bin`);
       const filePath = path.join(this.tempDir, finalFileName);
 
       // Save to file
@@ -200,7 +206,7 @@ export class FileHandler {
   private async cleanupFile(filePath: string): Promise<any> {
     try {
       // Only allow cleanup of files in our temp directory
-      if (!filePath.startsWith(this.tempDir)) {
+      if (!this.isInTempDirectory(filePath)) {
         return {
           success: false,
           error: 'Can only cleanup files in temp directory',
@@ -246,6 +252,21 @@ export class FileHandler {
 
     // Generate random filename
     return `upload-${crypto.randomBytes(8).toString('hex')}.bin`;
+  }
+
+  private sanitizeFileName(fileName: string): string {
+    const sanitized = path.basename(fileName.trim());
+    if (!sanitized || sanitized === '.' || sanitized === '..') {
+      throw new Error('Invalid file name');
+    }
+    return sanitized;
+  }
+
+  private isInTempDirectory(filePath: string): boolean {
+    const relativePath = path.relative(this.tempDir, path.resolve(filePath));
+    return (
+      relativePath !== '' && relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`)
+    );
   }
 
   /**

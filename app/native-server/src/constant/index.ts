@@ -1,3 +1,5 @@
+import { EXTENSION_ID } from 'chrome-mcp-shared';
+
 export enum NATIVE_MESSAGE_TYPE {
   START = 'start',
   STARTED = 'started',
@@ -24,7 +26,7 @@ export const SERVER_CONFIG = {
    * CORS origin whitelist - only allow Chrome/Firefox extensions and local debugging.
    * Use RegExp patterns for extension origins, string for exact match.
    */
-  CORS_ORIGIN: [/^chrome-extension:\/\//, /^moz-extension:\/\//, 'http://127.0.0.1'] as const,
+  CORS_ORIGIN: [`chrome-extension://${EXTENSION_ID}`, 'http://127.0.0.1'] as const,
   LOGGER_ENABLED: false,
 } as const;
 

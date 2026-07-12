@@ -1,6 +1,7 @@
 import { describe, expect, test, afterAll, beforeAll } from '@jest/globals';
 import supertest from 'supertest';
 import Server from './index';
+import { EXTENSION_ID } from 'chrome-mcp-shared';
 
 describe('服务器测试', () => {
   // 启动服务器测试实例
@@ -23,6 +24,22 @@ describe('服务器测试', () => {
       status: 'ok',
       message: 'pong',
     });
+  });
+
+  test('only grants CORS access to the configured extension', async () => {
+    const allowed = await supertest(Server.getInstance().server)
+      .get('/ping')
+      .set('Origin', `chrome-extension://${EXTENSION_ID}`)
+      .expect(200);
+    expect(allowed.headers['access-control-allow-origin']).toBe(
+      `chrome-extension://${EXTENSION_ID}`,
+    );
+
+    const rejected = await supertest(Server.getInstance().server)
+      .get('/ping')
+      .set('Origin', 'chrome-extension://untrusted-extension')
+      .expect(200);
+    expect(rejected.headers['access-control-allow-origin']).toBeUndefined();
   });
 
   test('isolates concurrent Streamable HTTP sessions', async () => {

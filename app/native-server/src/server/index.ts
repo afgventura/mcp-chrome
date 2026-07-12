@@ -75,8 +75,8 @@ export class Server {
           return cb(null, true);
         }
         // Check if origin matches any pattern in whitelist
-        const allowed = SERVER_CONFIG.CORS_ORIGIN.some((pattern) =>
-          pattern instanceof RegExp ? pattern.test(origin) : origin.startsWith(pattern),
+        const allowed = SERVER_CONFIG.CORS_ORIGIN.includes(
+          origin as (typeof SERVER_CONFIG.CORS_ORIGIN)[number],
         );
         cb(null, allowed);
       },

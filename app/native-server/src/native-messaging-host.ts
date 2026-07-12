@@ -207,11 +207,20 @@ export class NativeMessagingHost {
       this.pendingRequests.set(requestId, { resolve, reject, timeoutId });
 
       // Send message with requestId to Chrome
-      this.sendMessage({
-        type: messageType, // Define a request type, e.g. 'request_data'
-        payload: messagePayload,
-        requestId: requestId, // <--- Key: include request ID
-      });
+      this.sendMessage(
+        {
+          type: messageType, // Define a request type, e.g. 'request_data'
+          payload: messagePayload,
+          requestId: requestId, // <--- Key: include request ID
+        },
+        (error) => {
+          const pending = this.pendingRequests.get(requestId);
+          if (!pending) return;
+          clearTimeout(pending.timeoutId);
+          this.pendingRequests.delete(requestId);
+          pending.reject(new Error(`Failed to send request to Chrome extension: ${error.message}`));
+        },
+      );
     });
   }
 
@@ -273,7 +282,7 @@ export class NativeMessagingHost {
   /**
    * Send message to Chrome extension
    */
-  public sendMessage(message: any): void {
+  public sendMessage(message: any, onError?: (error: Error) => void): void {
     try {
       const messageString = JSON.stringify(message);
       const messageBuffer = Buffer.from(messageString);
@@ -282,15 +291,11 @@ export class NativeMessagingHost {
       // Ensure atomic write
       stdout.write(Buffer.concat([headerBuffer, messageBuffer]), (err) => {
         if (err) {
-          // Consider how to handle write failure, may affect request completion
-        } else {
-          // Message sent successfully, no action needed
+          onError?.(err);
         }
       });
-    } catch (error: any) {
-      // Catch JSON.stringify or Buffer operation errors
-      // If preparation stage fails, associated request may never be sent
-      // Need to consider whether to reject corresponding Promise (if called within sendRequestToExtensionAndWait)
+    } catch (error: unknown) {
+      onError?.(error instanceof Error ? error : new Error(String(error)));
     }
   }
 
