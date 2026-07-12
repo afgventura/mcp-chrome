@@ -8,7 +8,7 @@ import nativeMessagingHostInstance from '../native-messaging-host';
 import { NativeMessageType, TOOL_SCHEMAS } from 'chrome-mcp-shared';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
-async function listDynamicFlowTools(): Promise<Tool[]> {
+export async function listDynamicFlowTools(): Promise<Tool[]> {
   try {
     const response = await nativeMessagingHostInstance.sendRequestToExtensionAndWait(
       {},
@@ -79,7 +79,12 @@ export const setupTools = (server: Server) => {
   );
 };
 
-const handleToolCall = async (name: string, args: any): Promise<CallToolResult> => {
+export const listAvailableTools = async (): Promise<Tool[]> => [
+  ...TOOL_SCHEMAS,
+  ...(await listDynamicFlowTools()),
+];
+
+export const handleToolCall = async (name: string, args: any): Promise<CallToolResult> => {
   try {
     // If calling a dynamic flow tool (name starts with flow.), proxy to common flow-run tool
     if (name && name.startsWith('flow.')) {

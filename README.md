@@ -47,6 +47,11 @@ Chrome MCP Server is a Chrome extension-based **Model Context Protocol (MCP) ser
 
 ## 🚀 Quick Start
 
+> Afgventura coworkers: use the reproducible macOS setup in
+> [docs/AFGVENTURA_INSTALL.md](docs/AFGVENTURA_INSTALL.md). It builds a stable extension ID and
+> registers the native bridge for the local clone automatically. Prebuilt extension ZIPs are
+> available from tagged GitHub Releases and workflow artifacts.
+
 ### Prerequisites
 
 - Node.js >= 20.0.0 and pnpm/npm
