@@ -397,18 +397,15 @@ export const TOOL_SCHEMAS: Tool[] = [
   {
     name: TOOL_NAMES.BROWSER.NAVIGATE,
     description:
-      'Navigate to a URL, refresh the current tab, or navigate browser history (back/forward)',
+      'Navigate in an existing browser window. Reuses a matching or explicitly targeted tab; otherwise opens a tab in an existing window. Never creates a new browser window. Call get_windows_and_tabs first and pass tabId when replacing a specific tab.',
     inputSchema: {
       type: 'object',
+      additionalProperties: false,
       properties: {
         url: {
           type: 'string',
           description:
             'URL to navigate to. Special values: "back" or "forward" to navigate browser history in the target tab.',
-        },
-        newWindow: {
-          type: 'boolean',
-          description: 'Create a new window to navigate to the URL or not. Defaults to false',
         },
         tabId: {
           type: 'number',
@@ -424,16 +421,6 @@ export const TOOL_SCHEMAS: Tool[] = [
           type: 'boolean',
           description:
             'Perform the operation without stealing focus (do not activate the tab or focus the window). Default: false',
-        },
-        width: {
-          type: 'number',
-          description:
-            'Window width in pixels (default: 1280). When width or height is provided, a new window will be created.',
-        },
-        height: {
-          type: 'number',
-          description:
-            'Window height in pixels (default: 720). When width or height is provided, a new window will be created.',
         },
         refresh: {
           type: 'boolean',

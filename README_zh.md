@@ -148,7 +148,7 @@ pnpm list -g mcp-chrome-bridge
 <summary><strong>📊 浏览器管理 (6个工具)</strong></summary>
 
 - `get_windows_and_tabs` - 列出所有浏览器窗口和标签页
-- `chrome_navigate` - 导航到 URL 并控制视口
+- `chrome_navigate` - 在现有浏览器窗口中导航
 - `chrome_switch_tab` - 切换当前显示的标签页
 - `chrome_close_tabs` - 关闭特定标签页或窗口
 - `chrome_go_back_or_forward` - 浏览器导航控制

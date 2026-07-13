@@ -44,25 +44,21 @@ List all currently open browser windows and tabs.
 
 ### `chrome_navigate`
 
-Navigate to a URL with optional viewport control.
+Navigate in an existing browser window. It reuses a matching or explicitly targeted tab, or opens a tab in an existing window. It never creates a new browser window.
 
 **Parameters**:
 
 - `url` (string, optional): URL to navigate to (omit when `refresh=true`)
-- `newWindow` (boolean, optional): Create new window (default: false)
 - `tabId` (number, optional): Target an existing tab by ID (navigate/refresh that tab)
+- `windowId` (number, optional): Existing window in which to find or create a tab
 - `background` (boolean, optional): Do not activate the tab or focus the window (default: false)
-- `width` (number, optional): Viewport width in pixels (default: 1280)
-- `height` (number, optional): Viewport height in pixels (default: 720)
 
 **Example**:
 
 ```json
 {
   "url": "https://example.com",
-  "newWindow": true,
-  "width": 1920,
-  "height": 1080
+  "tabId": 123
 }
 ```
 

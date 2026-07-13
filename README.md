@@ -191,7 +191,7 @@ Complete tool list: [Complete Tool List](docs/TOOLS.md)
 <summary><strong>📊 Browser Management (6 tools)</strong></summary>
 
 - `get_windows_and_tabs` - List all browser windows and tabs
-- `chrome_navigate` - Navigate to URLs and control viewport
+- `chrome_navigate` - Navigate within existing browser windows
 - `chrome_switch_tab` - Switch the current active tab
 - `chrome_close_tabs` - Close specific tabs or windows
 - `chrome_go_back_or_forward` - Browser navigation control

@@ -3,19 +3,47 @@ import { BaseBrowserToolExecutor } from '../base-browser';
 import { TOOL_NAMES } from 'chrome-mcp-shared';
 import { captureFrameOnAction, isAutoCaptureActive } from './gif-recorder';
 
-// Default window dimensions
-const DEFAULT_WINDOW_WIDTH = 1280;
-const DEFAULT_WINDOW_HEIGHT = 720;
-
 interface NavigateToolParams {
   url?: string;
-  newWindow?: boolean;
-  width?: number;
-  height?: number;
   refresh?: boolean;
   tabId?: number;
   windowId?: number;
   background?: boolean; // when true, do not activate tab or focus window
+}
+
+export function buildNavigationUrlPatterns(input: string): string[] {
+  const patterns = new Set<string>();
+  try {
+    if (input.includes('*')) {
+      patterns.add(input);
+      return Array.from(patterns);
+    }
+
+    const url = new URL(input);
+    const pathWildcard = '/*';
+    const hostname = url.hostname.toLowerCase();
+    const hostnameWithoutWww = hostname.replace(/^www\./, '');
+    const isIpAddress = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || hostname.includes(':');
+    const supportsWwwVariant =
+      !isIpAddress && hostnameWithoutWww !== 'localhost' && hostnameWithoutWww.includes('.');
+    const hostnames = new Set([hostname, hostnameWithoutWww]);
+    if (supportsWwwVariant) {
+      hostnames.add(`www.${hostnameWithoutWww}`);
+    }
+
+    const protocols = new Set([url.protocol]);
+    protocols.add(url.protocol === 'https:' ? 'http:' : 'https:');
+    for (const protocol of protocols) {
+      for (const candidateHostname of hostnames) {
+        // Chrome match patterns do not accept ports. Omitting it still matches
+        // tabs on any port, while exact path/query selection happens below.
+        patterns.add(`${protocol}//${candidateHostname}${pathWildcard}`);
+      }
+    }
+  } catch {
+    patterns.add(input.endsWith('/') ? `${input}*` : `${input}/*`);
+  }
+  return Array.from(patterns);
 }
 
 /**
@@ -39,16 +67,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
   }
 
   async execute(args: NavigateToolParams): Promise<ToolResult> {
-    const {
-      newWindow = false,
-      width,
-      height,
-      url,
-      refresh = false,
-      tabId,
-      background,
-      windowId,
-    } = args;
+    const { url, refresh = false, tabId, background, windowId } = args;
 
     console.log(
       `Attempting to ${refresh ? 'refresh current tab' : `open URL: ${url}`} with options:`,
@@ -146,40 +165,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
       // Build robust match patterns from the provided URL.
       // This mirrors the approach in CloseTabsTool: ensure wildcard path and
       // add common variants (www/no-www, http/https) to handle real-world redirects.
-      const buildUrlPatterns = (input: string): string[] => {
-        const patterns = new Set<string>();
-        try {
-          if (!input.includes('*')) {
-            const u = new URL(input);
-            // Use host-level wildcard to include all paths; we'll do precise selection later
-            const pathWildcard = '/*';
-
-            const hostNoWww = u.host.replace(/^www\./, '');
-            const hostWithWww = hostNoWww.startsWith('www.') ? hostNoWww : `www.${hostNoWww}`;
-
-            // Keep original host
-            patterns.add(`${u.protocol}//${u.host}${pathWildcard}`);
-            // Add no-www variant
-            patterns.add(`${u.protocol}//${hostNoWww}${pathWildcard}`);
-            // Add www variant
-            patterns.add(`${u.protocol}//${hostWithWww}${pathWildcard}`);
-
-            // Add protocol variant to catch http↔https redirects
-            const altProtocol = u.protocol === 'https:' ? 'http:' : 'https:';
-            patterns.add(`${altProtocol}//${u.host}${pathWildcard}`);
-            patterns.add(`${altProtocol}//${hostNoWww}${pathWildcard}`);
-            patterns.add(`${altProtocol}//${hostWithWww}${pathWildcard}`);
-          } else {
-            patterns.add(input);
-          }
-        } catch {
-          // Fallback: best-effort wildcard suffix
-          patterns.add(input.endsWith('/') ? `${input}*` : `${input}/*`);
-        }
-        return Array.from(patterns);
-      };
-
-      const urlPatterns = buildUrlPatterns(url);
+      const urlPatterns = buildNavigationUrlPatterns(url);
       const candidateTabs = await chrome.tabs.query({ url: urlPatterns });
       console.log(`Found ${candidateTabs.length} matching tabs with patterns:`, urlPatterns);
 
@@ -290,142 +276,56 @@ class NavigateTool extends BaseBrowserToolExecutor {
         };
       }
 
-      // 2. If URL is not already open, decide how to open it based on options
-      const openInNewWindow = newWindow || typeof width === 'number' || typeof height === 'number';
-
-      if (openInNewWindow) {
-        console.log('Opening URL in a new window.');
-
-        // Create new window
-        const newWindow = await chrome.windows.create({
-          url: url,
-          width: typeof width === 'number' ? width : DEFAULT_WINDOW_WIDTH,
-          height: typeof height === 'number' ? height : DEFAULT_WINDOW_HEIGHT,
-          focused: background === true ? false : true,
-        });
-
-        if (newWindow && newWindow.id !== undefined) {
-          console.log(`URL opened in new Window ID: ${newWindow.id}`);
-
-          // Trigger auto-capture if the new window has a tab
-          const firstTab = newWindow.tabs?.[0];
-          if (firstTab?.id) {
-            await this.triggerAutoCapture(firstTab.id, firstTab.url);
-          }
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  success: true,
-                  message: 'Opened URL in new window',
-                  windowId: newWindow.id,
-                  tabs: newWindow.tabs
-                    ? newWindow.tabs.map((tab) => ({
-                        tabId: tab.id,
-                        url: tab.url,
-                      }))
-                    : [],
-                }),
-              },
-            ],
-            isError: false,
-          };
-        }
-      } else {
-        console.log('Opening URL in the last active window.');
-        // Try to open a new tab in the specified window, otherwise the most recently active window
-        let targetWindow: chrome.windows.Window | null = null;
-        if (typeof windowId === 'number') {
-          targetWindow = await chrome.windows.get(windowId, { populate: false });
-        }
-        if (!targetWindow) {
-          targetWindow = await chrome.windows.getLastFocused({ populate: false });
-        }
-
-        if (targetWindow && targetWindow.id !== undefined) {
-          console.log(`Found target Window ID: ${targetWindow.id}`);
-
-          const newTab = await chrome.tabs.create({
-            url: url,
-            windowId: targetWindow.id,
-            active: background === true ? false : true,
-          });
-          if (background !== true) {
-            await chrome.windows.update(targetWindow.id, { focused: true });
-          }
-
-          console.log(
-            `URL opened in new Tab ID: ${newTab.id} in existing Window ID: ${targetWindow.id}`,
-          );
-
-          // Trigger auto-capture on new tab
-          if (newTab.id) {
-            await this.triggerAutoCapture(newTab.id, newTab.url);
-          }
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  success: true,
-                  message: 'Opened URL in new tab in existing window',
-                  tabId: newTab.id,
-                  windowId: targetWindow.id,
-                  url: newTab.url,
-                }),
-              },
-            ],
-            isError: false,
-          };
-        } else {
-          // In rare cases, if there's no recently active window (e.g., browser just started with no windows)
-          // Fall back to opening in a new window
-          console.warn('No last focused window found, falling back to creating a new window.');
-
-          const fallbackWindow = await chrome.windows.create({
-            url: url,
-            width: DEFAULT_WINDOW_WIDTH,
-            height: DEFAULT_WINDOW_HEIGHT,
-            focused: true,
-          });
-
-          if (fallbackWindow && fallbackWindow.id !== undefined) {
-            console.log(`URL opened in fallback new Window ID: ${fallbackWindow.id}`);
-
-            // Trigger auto-capture if fallback window has a tab
-            const firstTab = fallbackWindow.tabs?.[0];
-            if (firstTab?.id) {
-              await this.triggerAutoCapture(firstTab.id, firstTab.url);
-            }
-
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify({
-                    success: true,
-                    message: 'Opened URL in new window',
-                    windowId: fallbackWindow.id,
-                    tabs: fallbackWindow.tabs
-                      ? fallbackWindow.tabs.map((tab) => ({
-                          tabId: tab.id,
-                          url: tab.url,
-                        }))
-                      : [],
-                  }),
-                },
-              ],
-              isError: false,
-            };
-          }
-        }
+      // 2. If URL is not already open, create a tab in an existing window.
+      // MCP callers must never create a separate browser window because this
+      // extension operates the user's real Chrome session.
+      console.log('Opening URL in an existing window.');
+      let targetWindow: chrome.windows.Window | null = null;
+      if (typeof windowId === 'number') {
+        targetWindow = await chrome.windows.get(windowId, { populate: false });
+      }
+      if (!targetWindow) {
+        targetWindow = await chrome.windows.getLastFocused({ populate: false });
       }
 
-      // If all attempts fail, return a generic error
-      return createErrorResponse('Failed to open URL: Unknown error occurred');
+      if (!targetWindow || targetWindow.id === undefined) {
+        return createErrorResponse(
+          'No existing browser window is available. Open a Chrome window before navigating.',
+        );
+      }
+
+      console.log(`Found target Window ID: ${targetWindow.id}`);
+      const newTab = await chrome.tabs.create({
+        url,
+        windowId: targetWindow.id,
+        active: background !== true,
+      });
+      if (background !== true) {
+        await chrome.windows.update(targetWindow.id, { focused: true });
+      }
+
+      console.log(
+        `URL opened in new Tab ID: ${newTab.id} in existing Window ID: ${targetWindow.id}`,
+      );
+      if (newTab.id) {
+        await this.triggerAutoCapture(newTab.id, newTab.url);
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: 'Opened URL in new tab in existing window',
+              tabId: newTab.id,
+              windowId: targetWindow.id,
+              url: newTab.url,
+            }),
+          },
+        ],
+        isError: false,
+      };
     } catch (error) {
       if (chrome.runtime.lastError) {
         console.error(`Chrome API Error: ${chrome.runtime.lastError.message}`, error);
