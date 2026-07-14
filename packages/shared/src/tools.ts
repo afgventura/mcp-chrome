@@ -1017,14 +1017,14 @@ export const TOOL_SCHEMAS: Tool[] = [
   {
     name: TOOL_NAMES.BROWSER.KEYBOARD,
     description:
-      'Simulate keyboard input on a web page. Supports single keys (Enter, Tab, Escape), key combinations (Ctrl+C, Ctrl+V), and text input. Can target a specific element or send to the focused element.',
+      'Simulate keyboard input on a web page. IMPORTANT: To type ordinary text, send the entire text in one call (for example, keys: "Hello World"). Never make separate chrome_keyboard calls for individual characters; this tool automatically types complete text character-by-character at the requested pace. Use separate calls only for distinct actions that must occur between typing, such as typing text, pressing Enter, then waiting for a page response. Named keys (Enter, Tab, Escape) and key combinations (Ctrl+C, Ctrl+V) remain atomic. Can target a specific element or send to the focused element.',
     inputSchema: {
       type: 'object',
       properties: {
         keys: {
           type: 'string',
           description:
-            'Keys or key combinations to simulate. Examples: "Enter", "Tab", "Ctrl+C", "Shift+Tab", "Hello World".',
+            'The complete text, one named key, or one key combination to simulate. For ordinary text, always pass the full string in a single call—even for long words or sentences. Example: use keys: "Numbers", not seven calls with "N", "u", "m", "b", "e", "r", and "s". The server deterministically emits the characters in order using delay. Named keys such as "Enter" and shortcuts such as "Ctrl+C" stay atomic.',
         },
         selector: {
           type: 'string',
@@ -1037,7 +1037,9 @@ export const TOOL_SCHEMAS: Tool[] = [
         },
         delay: {
           type: 'number',
-          description: 'Delay between keystrokes in milliseconds (default: 50).',
+          minimum: 0,
+          description:
+            'Delay between text characters or key operations in milliseconds (default: 50).',
         },
         tabId: {
           type: 'number',

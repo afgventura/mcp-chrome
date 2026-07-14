@@ -5,7 +5,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import nativeMessagingHostInstance from '../native-messaging-host';
-import { NativeMessageType, TOOL_SCHEMAS } from 'chrome-mcp-shared';
+import { NativeMessageType, planKeyboardInput, TOOL_NAMES, TOOL_SCHEMAS } from 'chrome-mcp-shared';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { applyBackgroundPolicy, filterExposedTools, isToolDisabled } from './background-policy';
 
@@ -82,6 +82,120 @@ export const setupTools = (server: Server) => {
 export const listAvailableTools = async (): Promise<Tool[]> =>
   filterExposedTools([...TOOL_SCHEMAS, ...(await listDynamicFlowTools())]);
 
+const DEFAULT_KEYBOARD_DELAY_MS = 50;
+
+function waitForKeyboardDelay(delay: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delay));
+}
+
+function keyboardToolError(message: string): CallToolResult {
+  return {
+    content: [{ type: 'text', text: message }],
+    isError: true,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function parseKeyboardResponse(data: unknown): {
+  success: boolean;
+  targetElement?: unknown;
+  results: unknown[];
+} | null {
+  if (!isRecord(data)) {
+    return null;
+  }
+
+  const content = data.content;
+  if (!Array.isArray(content)) {
+    return null;
+  }
+
+  const textContent = content.find((item) => isRecord(item) && item.type === 'text');
+  if (!isRecord(textContent) || typeof textContent.text !== 'string') {
+    return null;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(textContent.text);
+    if (!isRecord(parsed) || !('success' in parsed)) {
+      return null;
+    }
+
+    return {
+      success: parsed.success === true,
+      targetElement: 'targetElement' in parsed ? parsed.targetElement : undefined,
+      results: 'results' in parsed && Array.isArray(parsed.results) ? parsed.results : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function handleKeyboardToolCall(args: Record<string, unknown>): Promise<CallToolResult> {
+  const keys = args.keys;
+  if (typeof keys !== 'string' || keys.length === 0) {
+    return keyboardToolError('Invalid keyboard input: keys must be a non-empty string');
+  }
+
+  const requestedDelay = args.delay;
+  const delay =
+    typeof requestedDelay === 'number' && Number.isFinite(requestedDelay) && requestedDelay >= 0
+      ? requestedDelay
+      : DEFAULT_KEYBOARD_DELAY_MS;
+  const keyboardInputs = planKeyboardInput(keys);
+  const operationResults: unknown[] = [];
+  let targetElement: unknown;
+  let success = true;
+
+  for (let index = 0; index < keyboardInputs.length; index += 1) {
+    const response = await nativeMessagingHostInstance.sendRequestToExtensionAndWait(
+      {
+        name: TOOL_NAMES.BROWSER.KEYBOARD,
+        args: { ...args, keys: keyboardInputs[index], delay: 0 },
+      },
+      NativeMessageType.CALL_TOOL,
+      120000,
+    );
+
+    if (response.status !== 'success') {
+      return keyboardToolError(`Error calling tool: ${response.error}`);
+    }
+
+    const parsedResponse = parseKeyboardResponse(response.data);
+    if (!parsedResponse) {
+      return keyboardToolError('Chrome extension returned an invalid keyboard response');
+    }
+
+    success = success && parsedResponse.success;
+    operationResults.push(...parsedResponse.results);
+    targetElement = parsedResponse.targetElement ?? targetElement;
+
+    if (delay > 0 && index < keyboardInputs.length - 1) {
+      await waitForKeyboardDelay(delay);
+    }
+  }
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify({
+          success,
+          message: success
+            ? `Keyboard events simulated successfully: ${keys}`
+            : `Some keyboard events failed for: ${keys}`,
+          targetElement,
+          results: operationResults,
+        }),
+      },
+    ],
+    isError: false,
+  };
+}
+
 export const handleToolCall = async (name: string, args: any): Promise<CallToolResult> => {
   try {
     if (isToolDisabled(name)) {
@@ -97,6 +211,10 @@ export const handleToolCall = async (name: string, args: any): Promise<CallToolR
     }
 
     const forwardedArgs = applyBackgroundPolicy(name, args);
+
+    if (name === TOOL_NAMES.BROWSER.KEYBOARD) {
+      return handleKeyboardToolCall(forwardedArgs);
+    }
 
     // If calling a dynamic flow tool (name starts with flow.), proxy to common flow-run tool
     if (name && name.startsWith('flow.')) {

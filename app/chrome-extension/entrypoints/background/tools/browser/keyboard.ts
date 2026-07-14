@@ -1,6 +1,6 @@
 import { createErrorResponse, ToolResult } from '@/common/tool-handler';
 import { BaseBrowserToolExecutor } from '../base-browser';
-import { TOOL_NAMES } from 'chrome-mcp-shared';
+import { planKeyboardInput, TOOL_NAMES } from 'chrome-mcp-shared';
 import { TOOL_MESSAGE_TYPES } from '@/common/message-types';
 import { TIMEOUTS, ERROR_MESSAGES } from '@/common/constants';
 
@@ -12,6 +12,12 @@ interface KeyboardToolParams {
   tabId?: number; // target existing tab id
   windowId?: number; // when no tabId, pick active tab from this window
   frameId?: number; // target frame id for iframe support
+}
+
+export { planKeyboardInput } from 'chrome-mcp-shared';
+
+function waitForKeyboardDelay(delay: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delay));
 }
 
 /**
@@ -104,31 +110,52 @@ class KeyboardTool extends BaseBrowserToolExecutor {
         frameIds,
       );
 
-      // Send keyboard simulation message to content script
-      const result = await this.sendMessageToTab(
-        tab.id,
-        {
-          action: TOOL_MESSAGE_TYPES.SIMULATE_KEYBOARD,
-          keys,
-          selector: finalSelector,
-          delay,
-        },
-        args.frameId,
-      );
+      const keyboardInputs = planKeyboardInput(keys);
+      const operationResults: unknown[] = [];
+      let targetElement: unknown;
 
-      if (result.error) {
-        return createErrorResponse(result.error);
+      for (let index = 0; index < keyboardInputs.length; index += 1) {
+        const result = await this.sendMessageToTab(
+          tab.id,
+          {
+            action: TOOL_MESSAGE_TYPES.SIMULATE_KEYBOARD,
+            keys: keyboardInputs[index],
+            selector: finalSelector,
+            delay: 0,
+          },
+          args.frameId,
+        );
+
+        if (result.error) {
+          return createErrorResponse(result.error);
+        }
+
+        if (Array.isArray(result.results)) {
+          operationResults.push(...result.results);
+        }
+        targetElement = result.targetElement ?? targetElement;
+
+        if (delay > 0 && index < keyboardInputs.length - 1) {
+          await waitForKeyboardDelay(delay);
+        }
       }
+
+      const success = operationResults.every(
+        (result) =>
+          typeof result === 'object' && result !== null && 'success' in result && result.success,
+      );
 
       return {
         content: [
           {
             type: 'text',
             text: JSON.stringify({
-              success: true,
-              message: result.message || 'Keyboard operation successful',
-              targetElement: result.targetElement,
-              results: result.results,
+              success,
+              message: success
+                ? `Keyboard events simulated successfully: ${keys}`
+                : `Some keyboard events failed for: ${keys}`,
+              targetElement,
+              results: operationResults,
             }),
           },
         ],

@@ -50,6 +50,20 @@ if (window.__KEYBOARD_HELPER_INITIALIZED__) {
     cmd: 'metaKey',
   };
 
+  function isSingleCharacter(value) {
+    return Array.from(value).length === 1;
+  }
+
+  function getKeyboardCode(key) {
+    if (key.match(/^[a-z]$/i)) {
+      return `Key${key.toUpperCase()}`;
+    }
+    if (key.match(/^[0-9]$/)) {
+      return `Digit${key}`;
+    }
+    return '';
+  }
+
   /**
    * Parses a key string (e.g., "Ctrl+Shift+A", "Enter") into a main key and modifiers.
    * @param {string} keyString - String representation of a single key press (can include modifiers).
@@ -57,7 +71,25 @@ if (window.__KEYBOARD_HELPER_INITIALIZED__) {
    *          Returns null if the keyString is invalid or represents only modifiers.
    */
   function parseSingleKeyCombination(keyString) {
-    const parts = keyString.split('+').map((part) => part.trim().toLowerCase());
+    if (keyString === '+') {
+      return {
+        key: '+',
+        code: 'Equal',
+        keyCode: 187,
+        charCode: 43,
+        modifiers: {
+          ctrlKey: false,
+          altKey: false,
+          shiftKey: true,
+          metaKey: false,
+        },
+      };
+    }
+
+    const parts = keyString.split('+').map((part) => ({
+      raw: part.trim(),
+      normalized: part.trim().toLowerCase(),
+    }));
     const modifiers = {
       ctrlKey: false,
       altKey: false,
@@ -67,11 +99,11 @@ if (window.__KEYBOARD_HELPER_INITIALIZED__) {
     let mainKeyPart = null;
 
     for (const part of parts) {
-      if (MODIFIER_KEYS[part]) {
-        modifiers[MODIFIER_KEYS[part]] = true;
+      if (MODIFIER_KEYS[part.normalized]) {
+        modifiers[MODIFIER_KEYS[part.normalized]] = true;
       } else if (mainKeyPart === null) {
         // First non-modifier is the main key
-        mainKeyPart = part;
+        mainKeyPart = part.raw;
       } else {
         // Invalid format: multiple main keys in a single combination (e.g., "Ctrl+A+B")
         console.error(`Invalid key combination string: ${keyString}. Multiple main keys found.`);
@@ -83,8 +115,9 @@ if (window.__KEYBOARD_HELPER_INITIALIZED__) {
       // This case could happen if the keyString is something like "Ctrl+" or just "Ctrl"
       // If the intent was to press JUST 'Control', the input should be 'Control' not 'Control+'
       // Let's check if mainKeyPart is actually a modifier name used as a main key
-      if (Object.keys(MODIFIER_KEYS).includes(parts[parts.length - 1]) && parts.length === 1) {
-        mainKeyPart = parts[parts.length - 1]; // e.g. user wants to press "Control" key itself
+      const finalPart = parts[parts.length - 1]?.normalized;
+      if (finalPart && Object.keys(MODIFIER_KEYS).includes(finalPart) && parts.length === 1) {
+        mainKeyPart = finalPart; // e.g. user wants to press "Control" key itself
         // For "Control" key itself, key: "Control", code: "ControlLeft" (or Right)
         if (mainKeyPart === 'ctrl' || mainKeyPart === 'control')
           return { key: 'Control', code: 'ControlLeft', keyCode: 17, modifiers };
@@ -99,26 +132,38 @@ if (window.__KEYBOARD_HELPER_INITIALIZED__) {
       }
     }
 
-    const specialKey = SPECIAL_KEY_MAP[mainKeyPart];
+    const normalizedMainKey = mainKeyPart.toLowerCase();
+    const specialKey = SPECIAL_KEY_MAP[normalizedMainKey];
     if (specialKey) {
       return { ...specialKey, modifiers };
     }
 
-    // For single characters or other unmapped keys
-    if (mainKeyPart.length === 1) {
-      const charCode = mainKeyPart.charCodeAt(0);
+    // For single Unicode characters or other unmapped keys
+    if (isSingleCharacter(mainKeyPart)) {
       // If Shift is active and it's a letter, use the uppercase version for 'key'
       // This mimics more closely how keyboards behave.
       let keyChar = mainKeyPart;
       if (modifiers.shiftKey && mainKeyPart.match(/^[a-z]$/i)) {
         keyChar = mainKeyPart.toUpperCase();
+      } else if (
+        (modifiers.ctrlKey || modifiers.altKey || modifiers.metaKey) &&
+        mainKeyPart.match(/^[a-z]$/i)
+      ) {
+        // Shortcut notation conventionally uses uppercase letters ("Ctrl+C"),
+        // while browsers report event.key as lowercase unless Shift is held.
+        keyChar = mainKeyPart.toLowerCase();
       }
+
+      const keyCode = keyChar.match(/^[a-z]$/i)
+        ? keyChar.toUpperCase().charCodeAt(0)
+        : (keyChar.codePointAt(0) ?? 0);
+      const code = getKeyboardCode(keyChar);
 
       return {
         key: keyChar,
-        code: `Key${mainKeyPart.toUpperCase()}`, // 'a' -> KeyA, 'A' -> KeyA
-        keyCode: charCode,
-        charCode: charCode, // charCode is legacy, but some old systems might use it
+        code,
+        keyCode,
+        charCode: keyChar.codePointAt(0) ?? 0, // charCode is legacy, but some old systems might use it
         modifiers,
       };
     }
@@ -147,8 +192,8 @@ if (window.__KEYBOARD_HELPER_INITIALIZED__) {
       view: window,
       ...modifiers, // ctrlKey, altKey, shiftKey, metaKey
       // keyCode/which are deprecated but often set for compatibility
-      keyCode: keyCode || (key.length === 1 ? key.charCodeAt(0) : 0),
-      which: keyCode || (key.length === 1 ? key.charCodeAt(0) : 0),
+      keyCode: keyCode || (isSingleCharacter(key) ? (key.codePointAt(0) ?? 0) : 0),
+      which: keyCode || (isSingleCharacter(key) ? (key.codePointAt(0) ?? 0) : 0),
     };
 
     try {
@@ -156,7 +201,7 @@ if (window.__KEYBOARD_HELPER_INITIALIZED__) {
 
       // keypress is deprecated, but simulate if it's a character key or Enter
       // Only dispatch if keydown was not cancelled and it's a character producing key
-      if (kdRes && (key.length === 1 || key === 'Enter' || key === ' ')) {
+      if (kdRes && (isSingleCharacter(key) || key === 'Enter' || key === ' ')) {
         const keypressOptions = { ...eventOptions };
         if (charCode) keypressOptions.charCode = charCode;
         element.dispatchEvent(new KeyboardEvent('keypress', keypressOptions));
@@ -175,7 +220,7 @@ if (window.__KEYBOARD_HELPER_INITIALIZED__) {
 
   /**
    * Simulate keyboard events on an element or document
-   * @param {string} keysSequenceString - String representation of key(s) (e.g., "Enter", "Ctrl+C, A, B")
+   * @param {string} keysSequenceString - String representation of one key or chord (e.g., "Enter", "Ctrl+C")
    * @param {Element} targetElement - Element to dispatch events on (optional)
    * @param {number} delay - Delay between key sequences in milliseconds (optional)
    * @returns {Promise<Object>} - Result of the keyboard operation
@@ -189,10 +234,7 @@ if (window.__KEYBOARD_HELPER_INITIALIZED__) {
         await new Promise((resolve) => setTimeout(resolve, 50)); // Small delay for focus
       }
 
-      const keyCombinations = keysSequenceString
-        .split(',')
-        .map((k) => k.trim())
-        .filter((k) => k.length > 0);
+      const keyCombinations = [keysSequenceString];
       const operationResults = [];
 
       for (let i = 0; i < keyCombinations.length; i++) {
